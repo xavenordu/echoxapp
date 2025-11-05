@@ -1,0 +1,34 @@
+{
+  "questions": [
+    {
+      "id": "self-1",
+      "text": "What recurring dream or nightmare has stayed with you the longest?",
+      "category": "self-reflection",
+      "date": "2025-11-04T00:00:00Z"
+    },
+    {
+      "id": "identity-1",
+      "text": "If you could preserve one memory forever unchanged, which would it be?",
+      "category": "identity",
+      "date": "2025-11-05T00:00:00Z"
+    },
+    {
+      "id": "reality-1",
+      "text": "When did you last question if a memory was real or imagined?",
+      "category": "reality",
+      "date": "2025-11-06T00:00:00Z"
+    },
+    {
+      "id": "consciousness-1",
+      "text": "What makes you certain you're the same person who went to sleep last night?",
+      "category": "consciousness",
+      "date": "2025-11-07T00:00:00Z"
+    },
+    {
+      "id": "time-1",
+      "text": "Which memory feels most like it happened to a different version of you?",
+      "category": "time",
+      "date": "2025-11-08T00:00:00Z"
+    }
+  ]
+}
