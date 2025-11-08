@@ -3,43 +3,58 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'package:echoxapp/app.dart';
 import 'package:echoxapp/src/models/question.dart';
+import 'package:echoxapp/src/models/answer.dart';
+import 'package:echoxapp/src/models/onboarding_status.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase (required before using any Firebase services)
-await Firebase.initializeApp(
-  options: const FirebaseOptions(
-    apiKey: 'AIzaSyArA3GGIh7FYkZn6xogBVG4jOAMSCwoKGE',
-    appId: '1:674682432375:web:789791384585f1cd96cf72',
-    messagingSenderId: '674682432375',
-    projectId: 'echoxapp',
-    authDomain: 'echoxapp.firebaseapp.com',
-    storageBucket: 'echoxapp.firebasestorage.app',
-    measurementId: 'G-RN531B4VG9',
-  ),
-);
+  // 🔹 Load environment variables early
+  await dotenv.load(fileName: ".env");
 
-
-  // Initialize Supabase
-  await Supabase.initialize(
-    url: 'YOUR_SUPABASE_URL', // Replace with your Supabase project URL
-    anonKey: 'YOUR_SUPABASE_ANON_KEY', // Replace with your public anon key
+  // 🔹 Initialize Firebase
+  await Firebase.initializeApp(
+    options: const FirebaseOptions(
+      apiKey: 'AIzaSyArA3GGIh7FYkZn6xogBVG4jOAMSCwoKGE',
+      appId: '1:674682432375:web:789791384585f1cd96cf72',
+      messagingSenderId: '674682432375',
+      projectId: 'echoxapp',
+      authDomain: 'echoxapp.firebaseapp.com',
+      storageBucket: 'echoxapp.firebasestorage.app',
+      measurementId: 'G-RN531B4VG9',
+    ),
   );
 
-  // Initialize Hive
+  // 🔹 Initialize Supabase (with fallback safety)
+  final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? 'https://your-supabase-url.supabase.co';
+  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? 'your-anon-key';
+
+  await Supabase.initialize(
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
+  );
+
+  // 🔹 Initialize Hive
   await Hive.initFlutter();
-  Hive.registerAdapter(QuestionAdapter());
 
-  // Open Hive boxes used by the app
-  await Hive.openBox('questions');
-  await Hive.openBox('answers');
+  // Register all adapters
+  Hive
+    ..registerAdapter(QuestionAdapter())
+    ..registerAdapter(AnswerAdapter())
+    ..registerAdapter(OnboardingStatusAdapter());
 
-  // Start the app. Use the actual class defined in lib/app.dart
-  // ProviderScope is not necessarily a const constructor in all riverpod versions,
-  // so avoid using const at the top-level to prevent 'invalid constant value' errors.
+  // Open required Hive boxes
+  await Future.wait([
+    Hive.openBox('questions'),
+    Hive.openBox('answers'),
+    Hive.openBox('settings'),
+    Hive.openBox('onboarding'),
+  ]);
+
+  // 🔹 Launch the app
   runApp(ProviderScope(child: const EchoXapp()));
 }

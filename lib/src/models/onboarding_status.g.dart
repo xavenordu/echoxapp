@@ -21,13 +21,15 @@ class OnboardingStatusAdapter extends TypeAdapter<OnboardingStatus> {
       useCloudBackup: fields[1] as bool,
       completedAt: fields[2] as DateTime?,
       consentGiven: fields[3] as bool,
+      darkMode: fields[4] as bool,
+      notificationsEnabled: fields[5] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, OnboardingStatus obj) {
     writer
-      ..writeByte(4)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.completed)
       ..writeByte(1)
@@ -35,7 +37,11 @@ class OnboardingStatusAdapter extends TypeAdapter<OnboardingStatus> {
       ..writeByte(2)
       ..write(obj.completedAt)
       ..writeByte(3)
-      ..write(obj.consentGiven);
+      ..write(obj.consentGiven)
+      ..writeByte(4)
+      ..write(obj.darkMode)
+      ..writeByte(5)
+      ..write(obj.notificationsEnabled);
   }
 
   @override

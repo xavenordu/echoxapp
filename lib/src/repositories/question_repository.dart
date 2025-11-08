@@ -81,7 +81,8 @@ class QuestionRepository {
       final recentAnswers = await fetchAnswers();
       final lastFiveAnswers = recentAnswers.take(5).toList();
       
-      final response = _aiMirrorService.generateReply(lastFiveAnswers);
+      final response = await _aiMirrorService.generateMirrorResponse(lastFiveAnswers);
+
       final basedOn = _aiMirrorService.pickRecentPhrase(lastFiveAnswers);
       
       return MirrorResponse(

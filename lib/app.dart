@@ -1,8 +1,9 @@
+// lib/src/app.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:echoxapp/providers.dart';
 import 'package:echoxapp/src/screens/onboarding_page.dart';
 import 'package:echoxapp/src/navigation/main_navigator.dart';
-import 'package:echoxapp/providers.dart';
 
 class EchoXapp extends ConsumerWidget {
   const EchoXapp({super.key});
@@ -11,9 +12,10 @@ class EchoXapp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeProvider);
     final onboarding = ref.watch(onboardingStatusProvider);
-    
+
     return MaterialApp(
       title: 'EchoXapp',
+      debugShowCheckedModeBanner: false,
       themeMode: themeMode,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
@@ -24,10 +26,13 @@ class EchoXapp extends ConsumerWidget {
           seedColor: Colors.deepPurple,
           brightness: Brightness.dark,
         ),
-        scaffoldBackgroundColor: const Color(0xFF0B0C10),
-        textTheme: ThemeData.dark().textTheme,
       ),
-      home: onboarding.completed ? const MainNavigator() : const OnboardingPage(),
+      initialRoute: '/',
+      routes: {
+        '/': (context) =>
+            onboarding.completed ? const MainNavigator() : const OnboardingPage(),
+        '/home': (context) => const MainNavigator(),
+      },
     );
   }
 }

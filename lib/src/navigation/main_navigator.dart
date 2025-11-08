@@ -1,3 +1,4 @@
+// lib/src/navigation/main_navigator.dart
 import 'package:flutter/material.dart';
 import 'package:echoxapp/src/screens/dream_journal_screen.dart';
 import 'package:echoxapp/src/screens/silhouette_chat_screen.dart';
@@ -36,7 +37,7 @@ class _MainNavigatorState extends State<MainNavigator> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.bedtime), label: 'Unreality'),
           NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: 'Silhouette'),
-          NavigationDestination(icon: Icon(Icons.messenger), label: 'Paradox'),
+          NavigationDestination(icon: Icon(Icons.messenger_outline), label: 'Paradox'),
           NavigationDestination(icon: Icon(Icons.timeline), label: 'Timeline'),
         ],
       ),
