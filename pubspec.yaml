@@ -50,7 +50,7 @@ dependencies:
   logging: ^1.2.0
   intl: ^0.18.0
   collection: ^1.19.1
-  flutter_secure_storage: ^8.0.0
+  flutter_secure_storage: ^10.0.0-beta.4
   flutter_dotenv: ^6.0.0
   http: ^1.5.0
   drift: ^2.17.0
