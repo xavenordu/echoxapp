@@ -1,15 +1,12 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
-// Mobile/Desktop
-import 'package:drift/native.dart';
-// Web
-import 'package:drift/wasm.dart';
-import 'package:sqlite3/wasm.dart' as wasm;
-
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+
+//import 'dream_sql_repository_native.dart'
+ //   if (dart.library.html) 'dream_sql_repository_web.dart';
+
+import 'dream_sql_repository_web.dart';
+
 
 part 'dream_sql_repository.g.dart';
 
@@ -59,7 +56,7 @@ class DreamSqlRepository extends _$DreamSqlRepository {
     required String text,
     String? title,
     String? moodTag,
-    String? id, // ✅ allow external ID to prevent UUID mismatch
+    String? id,
   }) async {
     final entry = DreamEntriesCompanion.insert(
       id: id ?? const Uuid().v4(),
@@ -94,18 +91,18 @@ class DreamSqlRepository extends _$DreamSqlRepository {
     );
   }
 
-  /// ✅ Update sync state (used for error/conflict handling)
+  /// Update sync state (used for error/conflict handling)
   Future<void> updateSyncState(String id, String state) async {
     await (update(dreamEntries)..where((t) => t.id.equals(id)))
         .write(DreamEntriesCompanion(syncState: Value(state)));
   }
 
-  /// ✅ Retrieve dreams by sync state (used for retries)
+  /// Retrieve dreams by sync state (used for retries)
   Future<List<DreamEntryData>> getDreamsBySyncState(String state) async {
     return (select(dreamEntries)..where((t) => t.syncState.equals(state))).get();
   }
 
-  /// ✅ Retry failed syncs.
+  /// Retry failed syncs.
   Future<void> retryFailedSyncs(
     Future<void> Function(DreamEntryData entry) syncCallback,
   ) async {
@@ -130,26 +127,8 @@ class DreamSqlRepository extends _$DreamSqlRepository {
 }
 
 /// ─────────────────────────────────────────────────────────────
-/// DATABASE CONNECTION INITIALIZER (Mobile + Web)
+/// DATABASE CONNECTION INITIALIZER
 /// ─────────────────────────────────────────────────────────────
 LazyDatabase _openConnection() {
-  return LazyDatabase(() async {
-    if (kIsWeb) {
-      // ✅ Correct WASM initialization
-      final sqlite3 = await wasm.WasmSqlite3.loadFromUrl(
-        Uri.parse('${Uri.base.origin}/sqlite3.wasm'), // ✅ fixed path
-      );
-
-      // Persistent in-browser database via IndexedDB
-      return WasmDatabase(
-        sqlite3: sqlite3,
-        path: 'dreams.sqlite',
-      );
-    } else {
-      // ✅ Native SQLite for mobile/desktop
-      final dir = await getApplicationDocumentsDirectory();
-      final file = File(p.join(dir.path, 'dreams.sqlite'));
-      return NativeDatabase(file);
-    }
-  });
-}
+    return openWebConnection();
+  }
