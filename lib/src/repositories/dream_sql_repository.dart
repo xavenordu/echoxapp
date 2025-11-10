@@ -1,36 +1,42 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
+// Mobile/Desktop
 import 'package:drift/native.dart';
+// Web
+import 'package:drift/wasm.dart';
+import 'package:sqlite3/wasm.dart' as wasm;
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 part 'dream_sql_repository.g.dart';
 
-// ─────────────────────────────────────────────────────────────
-// TABLE DEFINITION
-// ─────────────────────────────────────────────────────────────
+/// ─────────────────────────────────────────────────────────────
+/// TABLE DEFINITION
+/// ─────────────────────────────────────────────────────────────
 @DataClassName('DreamEntryData')
 class DreamEntries extends Table {
   TextColumn get id => text()(); // UUID primary key
   TextColumn get title => text().nullable()();
-  TextColumn get text => text()(); // dream content
+  TextColumn get textContent => text()(); // renamed to avoid conflict with Table.text()
   TextColumn get originalText => text().nullable()(); // pre-edited text
   BoolColumn get edited => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get lastEditedAt => dateTime().nullable()();
   TextColumn get moodTag => text().nullable()();
   TextColumn get syncState =>
-      text().withDefault(const Constant('pending'))(); // pending/synced/conflict
+      text().withDefault(const Constant('pending'))(); // pending/synced/conflict/error
   IntColumn get version => integer().withDefault(const Constant(1))();
 
   @override
   Set<Column> get primaryKey => {id};
 }
 
-// ─────────────────────────────────────────────────────────────
-// DATABASE REPOSITORY
-// ─────────────────────────────────────────────────────────────
+/// ─────────────────────────────────────────────────────────────
+/// DATABASE REPOSITORY
+/// ─────────────────────────────────────────────────────────────
 @DriftDatabase(tables: [DreamEntries])
 class DreamSqlRepository extends _$DreamSqlRepository {
   DreamSqlRepository() : super(_openConnection());
@@ -38,36 +44,26 @@ class DreamSqlRepository extends _$DreamSqlRepository {
   @override
   int get schemaVersion => 1;
 
-  // ─────────────────────────────────────────────────────────────
-  // CRUD + SYNC HELPERS
-  // ─────────────────────────────────────────────────────────────
-
   /// Returns all stored dreams.
-  Future<List<DreamEntryData>> getAllDreams() async {
-    return await select(dreamEntries).get();
-  }
+  Future<List<DreamEntryData>> getAllDreams() => select(dreamEntries).get();
 
   /// Watches all dreams as a stream (useful for live UIs).
-  Stream<List<DreamEntryData>> watchAllDreams() {
-    return select(dreamEntries).watch();
-  }
+  Stream<List<DreamEntryData>> watchAllDreams() => select(dreamEntries).watch();
 
   /// Get a single dream by ID.
-  Future<DreamEntryData?> getDreamById(String id) async {
-    return await (select(dreamEntries)..where((tbl) => tbl.id.equals(id)))
-        .getSingleOrNull();
-  }
+  Future<DreamEntryData?> getDreamById(String id) =>
+      (select(dreamEntries)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
 
   /// Insert a new dream.
   Future<void> insertDream({
     required String text,
     String? title,
     String? moodTag,
+    String? id, // ✅ allow external ID to prevent UUID mismatch
   }) async {
-    final id = const Uuid().v4();
     final entry = DreamEntriesCompanion.insert(
-      id: id,
-      text: text,
+      id: id ?? const Uuid().v4(),
+      textContent: text,
       title: Value(title),
       moodTag: Value(moodTag),
       createdAt: DateTime.now(),
@@ -82,7 +78,7 @@ class DreamSqlRepository extends _$DreamSqlRepository {
   Future<void> updateDreamText(String id, String newText) async {
     await (update(dreamEntries)..where((tbl) => tbl.id.equals(id))).write(
       DreamEntriesCompanion(
-        text: Value(newText),
+        textContent: Value(newText),
         edited: const Value(true),
         lastEditedAt: Value(DateTime.now()),
         version: const Value(2),
@@ -98,24 +94,62 @@ class DreamSqlRepository extends _$DreamSqlRepository {
     );
   }
 
+  /// ✅ Update sync state (used for error/conflict handling)
+  Future<void> updateSyncState(String id, String state) async {
+    await (update(dreamEntries)..where((t) => t.id.equals(id)))
+        .write(DreamEntriesCompanion(syncState: Value(state)));
+  }
+
+  /// ✅ Retrieve dreams by sync state (used for retries)
+  Future<List<DreamEntryData>> getDreamsBySyncState(String state) async {
+    return (select(dreamEntries)..where((t) => t.syncState.equals(state))).get();
+  }
+
+  /// ✅ Retry failed syncs.
+  Future<void> retryFailedSyncs(
+    Future<void> Function(DreamEntryData entry) syncCallback,
+  ) async {
+    final failed = await getDreamsBySyncState('error');
+    for (final dream in failed) {
+      try {
+        await syncCallback(dream);
+        await markSynced(dream.id);
+      } catch (e) {
+        print('⚠️ Retry failed for ${dream.id}: $e');
+      }
+    }
+  }
+
   /// Delete a dream by ID.
   Future<void> deleteDream(String id) async {
     await (delete(dreamEntries)..where((tbl) => tbl.id.equals(id))).go();
   }
 
   /// Clear all local dreams.
-  Future<void> clearAll() async {
-    await delete(dreamEntries).go();
-  }
+  Future<void> clearAll() async => delete(dreamEntries).go();
 }
 
-// ─────────────────────────────────────────────────────────────
-// DATABASE CONNECTION INITIALIZER
-// ─────────────────────────────────────────────────────────────
+/// ─────────────────────────────────────────────────────────────
+/// DATABASE CONNECTION INITIALIZER (Mobile + Web)
+/// ─────────────────────────────────────────────────────────────
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, 'dreams.sqlite'));
-    return NativeDatabase(file);
+    if (kIsWeb) {
+      // ✅ Correct WASM initialization
+      final sqlite3 = await wasm.WasmSqlite3.loadFromUrl(
+        Uri.parse('${Uri.base.origin}/sqlite3.wasm'), // ✅ fixed path
+      );
+
+      // Persistent in-browser database via IndexedDB
+      return WasmDatabase(
+        sqlite3: sqlite3,
+        path: 'dreams.sqlite',
+      );
+    } else {
+      // ✅ Native SQLite for mobile/desktop
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File(p.join(dir.path, 'dreams.sqlite'));
+      return NativeDatabase(file);
+    }
   });
 }

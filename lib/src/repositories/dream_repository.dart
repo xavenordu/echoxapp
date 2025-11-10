@@ -1,48 +1,36 @@
+import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 import 'package:echoxapp/src/models/dream_entry.dart';
 import 'package:echoxapp/src/repositories/dream_sql_repository.dart';
 import 'package:echoxapp/src/repositories/dream_firestore_repository.dart';
-import 'package:uuid/uuid.dart';
 
+/// Unified repository that coordinates between
+/// local Drift DB and remote Firestore storage.
 class DreamRepository {
-  final DreamDatabase localDb;
+  final DreamSqlRepository localDb;
   final DreamFirestoreRepository remoteDb;
 
-  DreamRepository({required this.localDb, required this.remoteDb});
+  DreamRepository({
+    required this.localDb,
+    required this.remoteDb,
+  });
 
-  // Generate unique ID
   final _uuid = const Uuid();
 
+  /// Fetch all dreams stored locally.
   Future<List<DreamEntry>> fetchLocalDreams() async {
     final entries = await localDb.getAllDreams();
-    return entries.map((e) => DreamEntry(
-      id: e.id,
-      title: e.title,
-      text: e.text,
-      originalText: e.originalText,
-      edited: e.edited,
-      createdAt: e.createdAt,
-      lastEditedAt: e.lastEditedAt,
-      moodTag: e.moodTag,
-      syncState: e.syncState,
-      version: e.version,
-    )).toList();
+    return entries.map(_mapLocalToModel).toList();
   }
 
+  /// Watch for real-time local DB updates.
   Stream<List<DreamEntry>> watchLocalDreams() {
-    return localDb.watchAllDreams().map((rows) => rows.map((e) => DreamEntry(
-      id: e.id,
-      title: e.title,
-      text: e.text,
-      originalText: e.originalText,
-      edited: e.edited,
-      createdAt: e.createdAt,
-      lastEditedAt: e.lastEditedAt,
-      moodTag: e.moodTag,
-      syncState: e.syncState,
-      version: e.version,
-    )).toList());
+    return localDb.watchAllDreams().map(
+          (rows) => rows.map(_mapLocalToModel).toList(),
+        );
   }
 
+  /// Add a new dream (offline-first).
   Future<void> addDream(String text, {String? title, String? moodTag}) async {
     final entry = DreamEntry(
       id: _uuid.v4(),
@@ -53,39 +41,66 @@ class DreamRepository {
       createdAt: DateTime.now(),
     );
 
-    // save local
-    await localDb.insertDream(DreamEntriesCompanion.insert(
-      id: entry.id,
-      title: Value(entry.title),
+    // 1️⃣ Always insert locally first (offline-first)
+    await localDb.insertDream(
+      id: entry.id, // ✅ pass through the same UUID
       text: entry.text,
-      originalText: Value(entry.originalText),
-      edited: Value(entry.edited),
-      createdAt: entry.createdAt,
-      lastEditedAt: Value(entry.lastEditedAt),
-      moodTag: Value(entry.moodTag),
-      syncState: entry.syncState,
-      version: entry.version,
-    ));
+      title: entry.title,
+      moodTag: entry.moodTag,
+    );
 
-    // sync to Firestore
-    await remoteDb.addOrUpdateDream(entry);
+    // 2️⃣ Try to sync with Firestore
+    try {
+      await remoteDb.addOrUpdateDream(entry);
+      await localDb.markSynced(entry.id); // only mark synced if Firestore succeeded
+    } catch (e, stack) {
+      // 3️⃣ On failure, mark entry as 'error' for retry later
+      print('⚠️ Failed to sync dream ${entry.id}: $e');
+      print(stack);
+      await localDb.updateSyncState(entry.id, 'error');
+    }
   }
 
+  /// Synchronize local DB with Firestore content.
+  /// Inserts only new remote entries (avoids duplicates).
   Future<void> syncFromCloud() async {
-    final remote = await remoteDb.fetchDreams();
-    for (var entry in remote) {
-      await localDb.insertDream(DreamEntriesCompanion.insert(
-        id: entry.id,
-        title: Value(entry.title),
-        text: entry.text,
-        originalText: Value(entry.originalText),
-        edited: Value(entry.edited),
-        createdAt: entry.createdAt,
-        lastEditedAt: Value(entry.lastEditedAt),
-        moodTag: Value(entry.moodTag),
-        syncState: 'synced',
-        version: entry.version,
-      ));
+    final remoteDreams = await remoteDb.fetchDreams();
+    for (var entry in remoteDreams) {
+      final existing = await localDb.getDreamById(entry.id);
+      if (existing == null) {
+        await localDb.insertDream(
+          id: entry.id,
+          text: entry.text,
+          title: entry.title,
+          moodTag: entry.moodTag,
+        );
+      } else {
+        // Optionally update local version if remote is newer
+      }
     }
+  }
+
+  /// ✅ Retry all previously failed syncs (e.g., after reconnect)
+  Future<void> retryFailedSyncs() async {
+    await localDb.retryFailedSyncs((entry) async {
+      final model = _mapLocalToModel(entry);
+      await remoteDb.addOrUpdateDream(model);
+    });
+  }
+
+  /// Internal mapper: Drift row → app model.
+  DreamEntry _mapLocalToModel(DreamEntryData e) {
+    return DreamEntry(
+      id: e.id,
+      title: e.title ?? '',
+      text: e.textContent,
+      originalText: e.originalText ?? '',
+      edited: e.edited,
+      createdAt: e.createdAt,
+      lastEditedAt: e.lastEditedAt,
+      moodTag: e.moodTag ?? '',
+      syncState: e.syncState,
+      version: e.version,
+    );
   }
 }

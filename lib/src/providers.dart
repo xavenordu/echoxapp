@@ -37,18 +37,10 @@ final dreamFirestoreRepositoryProvider =
   return DreamFirestoreRepository(FirebaseFirestore.instance);
 });
 
-final hybridDreamRepositoryProvider = Provider<DreamRepository>((ref) {
+final dreamRepositoryProvider = Provider<DreamRepository>((ref) {
   final local = ref.watch(dreamSqlRepositoryProvider);
   final remote = ref.watch(dreamFirestoreRepositoryProvider);
   return DreamRepository(localDb: local, remoteDb: remote);
-});
-
-/// ─────────────────────────────────────────────────────────────
-/// DREAM REPOSITORY PROVIDER (Legacy or unified use)
-/// ─────────────────────────────────────────────────────────────
-final dreamRepositoryProvider = Provider<DreamRepository>((ref) {
-  final firebase = ref.read(firebaseServiceProvider);
-  return DreamRepository(firebaseService: firebase);
 });
 
 /// ─────────────────────────────────────────────────────────────
@@ -91,16 +83,11 @@ class OnboardingNotifier extends StateNotifier<OnboardingStatus> {
 
   Future<void> _load() async {
     try {
-      final completedRaw =
-          await _secureStorage.read(key: 'onboarding_completed');
-      final useCloudRaw =
-          await _secureStorage.read(key: 'use_cloud_backup');
-      final consentRaw =
-          await _secureStorage.read(key: 'consent_given');
-      final darkModeRaw =
-          await _secureStorage.read(key: 'dark_mode');
-      final notificationsRaw =
-          await _secureStorage.read(key: 'notifications_enabled');
+      final completedRaw = await _secureStorage.read(key: 'onboarding_completed');
+      final useCloudRaw = await _secureStorage.read(key: 'use_cloud_backup');
+      final consentRaw = await _secureStorage.read(key: 'consent_given');
+      final darkModeRaw = await _secureStorage.read(key: 'dark_mode');
+      final notificationsRaw = await _secureStorage.read(key: 'notifications_enabled');
 
       state = state.copyWith(
         completed: completedRaw == 'true',
@@ -117,20 +104,17 @@ class OnboardingNotifier extends StateNotifier<OnboardingStatus> {
 
   Future<void> setCloudBackup(bool value) async {
     state = state.copyWith(useCloudBackup: value);
-    await _secureStorage.write(
-        key: 'use_cloud_backup', value: value ? 'true' : 'false');
+    await _secureStorage.write(key: 'use_cloud_backup', value: value ? 'true' : 'false');
   }
 
   Future<void> setDarkMode(bool value) async {
     state = state.copyWith(darkMode: value);
-    await _secureStorage.write(
-        key: 'dark_mode', value: value ? 'true' : 'false');
+    await _secureStorage.write(key: 'dark_mode', value: value ? 'true' : 'false');
   }
 
   Future<void> setNotifications(bool value) async {
     state = state.copyWith(notificationsEnabled: value);
-    await _secureStorage.write(
-        key: 'notifications_enabled', value: value ? 'true' : 'false');
+    await _secureStorage.write(key: 'notifications_enabled', value: value ? 'true' : 'false');
   }
 
   Future<void> completeOnboarding() async {
@@ -139,8 +123,7 @@ class OnboardingNotifier extends StateNotifier<OnboardingStatus> {
       completedAt: DateTime.now(),
       consentGiven: true,
     );
-    await _secureStorage.write(
-        key: 'onboarding_completed', value: 'true');
+    await _secureStorage.write(key: 'onboarding_completed', value: 'true');
     await _secureStorage.write(key: 'consent_given', value: 'true');
   }
 }
@@ -184,6 +167,5 @@ final filteredAnswersProvider = FutureProvider<List<Answer>>((ref) async {
   final repo = await ref.watch(questionRepositoryProvider.future);
   final keyword = ref.watch(timelineKeywordFilterProvider);
   final sentiment = ref.watch(timelineSentimentFilterProvider);
-  return repo.fetchAnswersFiltered(
-      keyword: keyword, sentimentLabel: sentiment);
+  return repo.fetchAnswersFiltered(keyword: keyword, sentimentLabel: sentiment);
 });
